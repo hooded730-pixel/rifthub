@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rift Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef2f6;--card:#fff;--ink:#14213d;--muted:#5b6b82;--line:#d5dde8;--accent:#2f5bea;--accent-ink:#fff;--ok:#1f8a5b;--bad:#c23b3b;--r:14px}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1522;--card:#16203a;--ink:#e8eefc;--muted:#9aaac4;--line:#2a3757;--accent:#6b8cff;--accent-ink:#0e1522;--ok:#4cc38a;--bad:#ff7b7b}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:"Instrument Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px max(20px,calc((100% - 960px)/2));border-bottom:1px solid var(--line);background:var(--card)}
+header a.brand{font-weight:700;font-size:1.15rem;color:var(--ink);text-decoration:none}
+nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:960px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:clamp(1.9rem,5vw,3rem);line-height:1.1;margin:0 0 12px;letter-spacing:-.02em}
+h2{font-size:1.3rem;margin:0 0 14px}
+p.lead{font-size:1.1rem;color:var(--muted);max-width:56ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px}
+.narrow{max-width:420px;margin:24px auto}
+label{display:block;font-weight:500;font-size:.92rem;margin:14px 0 6px}
+input,textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+textarea{min-height:90px;resize:vertical}
+input:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 16px;border-radius:10px;text-decoration:none;display:inline-block}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn.block{width:100%;margin-top:18px;text-align:center}
+.btn[disabled]{opacity:.6;cursor:wait}
+.msg{margin-top:14px;padding:10px 12px;border-radius:10px;font-size:.95rem}
+.msg.err{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.msg.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.links{margin-top:16px;font-size:.93rem;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.links a{color:var(--accent)}
+.grid{display:grid;gap:18px;grid-template-columns:1fr}
+@media(min-width:760px){.grid.two{grid-template-columns:1fr 1fr}}
+.note{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+.note:first-child{border-top:0}
+.note p{margin:0;white-space:pre-wrap;word-break:break-word}
+.note small{color:var(--muted)}
+.empty{color:var(--muted)}
+.hero{padding:40px 0 20px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.chat{height:55vh;min-height:280px;overflow:auto;padding:4px 2px}
+.chat p{margin:0 0 10px;word-break:break-word}
+.row{display:flex;gap:8px;margin-top:12px}
+.tag{font-size:.8rem;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin-left:6px}
+.hero .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="#inicio">Rift Hub</a>
+  <nav id="nav"></nav>
+</header>
+<main id="app"><p class="empty">Carregando…</p></main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* ====== CONFIGURE AQUI (Supabase → Project Settings → API) ====== */
+const SUPABASE_URL = "https://rsoorjueehtfnratuyef.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_3U3fJ2H64KGFmuX2ipv9ug_9Ak4AkIc";
+/* ================================================================ */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { flowType: "pkce" } });
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let session = null;
+
+const ERROS = {
+  "Invalid login credentials": "E-mail ou senha incorretos.",
+  "Email not confirmed": "Confirme seu e-mail pelo link que enviamos antes de entrar.",
+  "User already registered": "Já existe uma conta com esse e-mail. Tente entrar.",
+  "Signup requires a valid password": "Digite uma senha válida.",
+  "New password should be different from the old password.": "A nova senha precisa ser diferente da atual."
+};
+const traduz = m => {
+  if (!m) return "Algo deu errado. Tente de novo.";
+  if (ERROS[m]) return ERROS[m];
+  if (/at least \d+ char/i.test(m)) return "A senha precisa ter pelo menos 8 caracteres.";
+  if (/rate limit|security purposes/i.test(m)) return "Muitas tentativas. Espere um minuto e tente de novo.";
+  if (/Failed to fetch|NetworkError/i.test(m)) return "Sem conexão com o servidor. Verifique a internet e as chaves do Supabase.";
+  return m;
+};
+const show = (el, text, ok) => { el.innerHTML = text ? `<div class="msg ${ok ? "ok" : "err"}" role="alert">${esc(text)}</div>` : ""; };
+const busy = (btn, on, label) => { btn.disabled = on; if (label) btn.textContent = on ? "Aguarde…" : label; };
+
+const GAME={wr:"Wild Rift",pc:"LoL PC"};
+const ROLES=["top","selva","meio","adc","suporte","qualquer"];
+const inp=(id,l,max,req=true)=>`<label for="${id}">${l}</label><input id="${id}" maxlength="${max}" ${req?"required":""}>`;
+const txt=(id,l,max,req=true)=>`<label for="${id}">${l}</label><textarea id="${id}" maxlength="${max}" ${req?"required":""}></textarea>`;
+const sel=(id,l,o)=>`<label for="${id}">${l}</label><select id="${id}">${o.map(x=>Array.isArray(x)?`<option value="${x[0]}">${x[1]}</option>`:`<option>${x}</option>`).join("")}</select>`;
+const jogo=sel("game","Jogo",[["wr","Wild Rift"],["pc","LoL PC"]]);
+const pagina=(t,f)=>`<h1>${t}</h1><div class="tabs">${[["","Todos"],["wr","Wild Rift"],["pc","LoL PC"]].map(([k,n])=>`<button class="btn tab" data-g="${k}">${n}</button>`).join("")}</div>
+<div class="grid two"><form class="card" id="f-new"><h2>Publicar</h2>${f}<button class="btn primary block" type="submit">Publicar</button><div id="msg"></div></form><div class="card"><div id="lista"><p class="empty">Carregando…</p></div></div></div>`;
+/* ---------- Telas ---------- */
+const views = {
+  inicio: () => `
+    <section class="hero">
+      <h1>Ache seu duo e suba de elo.</h1>
+      <p class="lead">Comunidade de LoL PC e Wild Rift: chat ao vivo, jogadores para formar grupo, builds e dicas da galera.</p>
+      <div class="actions"><a class="btn primary" href="#chat">Entrar no chat</a><a class="btn" href="#jogadores">Achar jogadores</a><a class="btn" href="#builds">Ver builds</a>
+        ${session ? `<a class="btn primary" href="#painel">Abrir painel</a>` :
+          `<a class="btn primary" href="#cadastro">Criar conta</a><a class="btn" href="#entrar">Entrar</a>`}
+      </div>
+    </section>`,
+
+  entrar: () => `
+    <form class="card narrow" id="f-login" novalidate>
+      <h2>Entrar</h2>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required>
+      <button class="btn primary block" type="submit">Entrar</button>
+      <div id="msg"></div>
+      <div class="links"><a href="#recuperar">Esqueci a senha</a><a href="#cadastro">Criar conta</a></div>
+    </form>`,
+
+  cadastro: () => `
+    <form class="card narrow" id="f-cad" novalidate>
+      <h2>Criar conta</h2>
+      <label for="nome">Nome</label>
+      <input id="nome" type="text" autocomplete="name" maxlength="80" required>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <label for="senha">Senha (mínimo 8 caracteres)</label>
+      <input id="senha" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn primary block" type="submit">Criar conta</button>
+      <div id="msg"></div>
+      <div class="links"><span></span><a href="#entrar">Já tenho conta</a></div>
+    </form>`,
+
+  recuperar: () => `
+    <form class="card narrow" id="f-rec" novalidate>
+      <h2>Recuperar senha</h2>
+      <p class="empty">Enviaremos um link para você criar uma nova senha.</p>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <button class="btn primary block" type="submit">Enviar link</button>
+      <div id="msg"></div>
+      <div class="links"><a href="#entrar">Voltar</a><span></span></div>
+    </form>`,
+
+  redefinir: () => `
+    <form class="card narrow" id="f-red" novalidate>
+      <h2>Nova senha</h2>
+      <label for="senha">Nova senha (mínimo 8 caracteres)</label>
+      <input id="senha" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn primary block" type="submit">Salvar nova senha</button>
+      <div id="msg"></div>
+    </form>`,
+
+  chat: () => `<h1>Chat público</h1>
+    <div class="tabs">${[["geral","Geral"],["wr","Wild Rift"],["pc","LoL PC"]].map(([k,n])=>`<button class="btn tab" data-k="${k}">${n}</button>`).join("")}</div>
+    <div class="card"><div id="msgs" class="chat" aria-live="polite"></div>
+    <form id="f-msg" class="row"><input id="m" maxlength="300" placeholder="Escreva uma mensagem" autocomplete="off" aria-label="Mensagem"><button class="btn primary" type="submit">Enviar</button></form><div id="msg"></div></div>`,
+
+  jogadores: () => pagina("Achar jogadores", jogo+inp("nick","Seu nick",40)+sel("role","Sua rota",ROLES)+inp("rank","Elo (ex.: Ouro II)",30,false)+inp("server","Servidor (ex.: BR)",30,false)+txt("note","Recado (opcional)",200,false)),
+  posts: () => pagina("Posts", jogo+sel("category","Categoria",[["dica","Dica"],["build","Build"],["discussao","Discussão"],["clipe","Clipe"]])+inp("title","Título",120)+txt("body","Texto",5000)),
+  builds: () => pagina("Builds e meta", jogo+inp("champion","Campeão",40)+sel("role","Rota",ROLES)+inp("items","Itens (em ordem)",300)+inp("runes","Runas",300,false)+txt("notes","Observações (patch, matchups…)",1000,false)),
+
+  painel: () => `
+    <h1 id="ola">Painel</h1>
+    <div class="grid two">
+      <form class="card" id="f-nota">
+        <h2>Nova anotação</h2>
+        <label for="txt">Texto</label>
+        <textarea id="txt" maxlength="2000" required></textarea>
+        <button class="btn primary block" type="submit">Salvar anotação</button>
+        <div id="msg"></div>
+      </form>
+      <div class="card"><h2>Suas anotações</h2><div id="lista"><p class="empty">Carregando…</p></div></div>
+    </div>`,
+
+  perfil: () => `
+    <h1>Perfil</h1>
+    <div class="grid two">
+      <form class="card" id="f-perfil">
+        <h2>Seus dados</h2>
+        <label for="email">E-mail</label>
+        <input id="email" type="email" disabled>
+        <label for="nome">Nome</label>
+        <input id="nome" type="text" maxlength="80">
+        <label for="bio">Sobre você</label>
+        <textarea id="bio" maxlength="300"></textarea>
+        <button class="btn primary block" type="submit">Salvar alterações</button>
+        <div id="msg"></div>
+      </form>
+      <form class="card" id="f-senha" novalidate>
+        <h2>Trocar senha</h2>
+        <label for="senha">Nova senha (mínimo 8 caracteres)</label>
+        <input id="senha" type="password" autocomplete="new-password" minlength="8" required>
+        <button class="btn block" type="submit">Trocar senha</button>
+        <div id="msg"></div>
+      </form>
+    </div>`
+};
+
+const crud=(table,campos,item)=>{
+  let g="";
+  const lista=$("#lista"), tabs=[...document.querySelectorAll(".tab")];
+  const carregar=async()=>{
+    let q=sb.from(table).select("*").order("created_at",{ascending:false}).limit(50); if(g) q=q.eq("game",g);
+    const {data,error}=await q;
+    lista.innerHTML=error?`<div class="msg err">${esc(traduz(error.message))}</div>`:(data.length?data.map(r=>`<article class="note"><div>${item(r)}<small>${esc(r.author_name)} · ${new Date(r.created_at).toLocaleDateString("pt-BR")}</small></div>${session&&session.user.id===r.user_id?`<button class="btn danger" data-id="${r.id}">Excluir</button>`:""}</article>`).join(""):'<p class="empty">Nada por aqui ainda. Publique o primeiro.</p>');
+    lista.querySelectorAll("[data-id]").forEach(b=>b.onclick=async()=>{await sb.from(table).delete().eq("id",b.dataset.id);carregar()});
+  };
+  tabs.forEach(b=>b.onclick=()=>{g=b.dataset.g;tabs.forEach(x=>x.classList.toggle("primary",x===b));carregar()});
+  tabs[0].classList.add("primary");
+  $("#f-new").onsubmit=async e=>{
+    e.preventDefault();
+    if(!session) return show($("#msg"),"Entre na sua conta para publicar.");
+    const row={}; campos.forEach(c=>row[c]=$("#"+c).value.trim());
+    const {error}=await sb.from(table).insert(row);
+    if(error) return show($("#msg"),traduz(error.message));
+    e.target.reset(); show($("#msg"),"Publicado.",true); carregar();
+  };
+  carregar();
+};
+/* ---------- Lógica de cada tela ---------- */
+const binds = {
+  entrar() {
+    const f = $("#f-login"), b = $("button", f);
+    f.onsubmit = async e => {
+      e.preventDefault(); busy(b, true, "Entrar");
+      const { error } = await sb.auth.signInWithPassword({ email: $("#email").value.trim(), password: $("#senha").value });
+      busy(b, false, "Entrar");
+      if (error) return show($("#msg"), traduz(error.message));
+      location.hash = "#painel";
+    };
+  },
+  cadastro() {
+    const f = $("#f-cad"), b = $("button", f);
+    f.onsubmit = async e => {
+      e.preventDefault();
+      if ($("#senha").value.length < 8) return show($("#msg"), "A senha precisa ter pelo menos 8 caracteres.");
+      busy(b, true, "Criar conta");
+      const { data, error } = await sb.auth.signUp({
+        email: $("#email").value.trim(), password: $("#senha").value,
+        options: { data: { full_name: $("#nome").value.trim() }, emailRedirectTo: location.origin + location.pathname }
+      });
+      busy(b, false, "Criar conta");
+      if (error) return show($("#msg"), traduz(error.message));
+      if (data.session) location.hash = "#painel";
+      else show($("#msg"), "Conta criada! Enviamos um link de confirmação para o seu e-mail.", true);
+    };
+  },
+  recuperar() {
+    const f = $("#f-rec"), b = $("button", f);
+    f.onsubmit = async e => {
+      e.preventDefault(); busy(b, true, "Enviar link");
+      const { error } = await sb.auth.resetPasswordForEmail($("#email").value.trim(), { redirectTo: location.origin + location.pathname });
+      busy(b, false, "Enviar link");
+      if (error) return show($("#msg"), traduz(error.message));
+      show($("#msg"), "Se esse e-mail tiver conta, o link já está a caminho.", true);
+    };
+  },
+  redefinir() {
+    const f = $("#f-red"), b = $("button", f);
+    f.onsubmit = async e => {
+      e.preventDefault();
+      if ($("#senha").value.length < 8) return show($("#msg"), "A senha precisa ter pelo menos 8 caracteres.");
+      busy(b, true, "Salvar nova senha");
+      const { error } = await sb.auth.updateUser({ password: $("#senha").value });
+      busy(b, false, "Salvar nova senha");
+      if (error) return show($("#msg"), traduz(error.message));
+      show($("#msg"), "Senha alterada. Redirecionando…", true);
+      setTimeout(() => (location.hash = "#painel"), 1200);
+    };
+  },
+  chat() {
+    let ch, room="geral"; const box=$("#msgs"), tabs=[...document.querySelectorAll(".tab")];
+    const add=m=>{box.insertAdjacentHTML("beforeend",`<p><b>${esc(m.author_name)}</b>${m.is_bot?'<span class="tag">bot</span>':""} <small>${new Date(m.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</small><br>${esc(m.content)}</p>`);box.scrollTop=box.scrollHeight};
+    const abrir=async r=>{
+      room=r; tabs.forEach(t=>t.classList.toggle("primary",t.dataset.k===r));
+      if(ch) sb.removeChannel(ch); box.innerHTML="";
+      const {data}=await sb.from("messages").select("*").eq("room",r).order("created_at",{ascending:false}).limit(50);
+      (data||[]).reverse().forEach(add);
+      ch=sb.channel("chat-"+r).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:"room=eq."+r},p=>add(p.new)).subscribe();
+    };
+    tabs.forEach(t=>t.onclick=()=>abrir(t.dataset.k));
+    $("#f-msg").onsubmit=async e=>{
+      e.preventDefault(); const c=$("#m").value.trim(); if(!c) return;
+      if(!session) return show($("#msg"),"Entre na sua conta para falar no chat.");
+      const {error}=await sb.from("messages").insert({room,content:c});
+      if(error) return show($("#msg"),traduz(error.message));
+      $("#m").value=""; show($("#msg"),"");
+    };
+    window.__c=()=>{if(ch) sb.removeChannel(ch)};
+    abrir("geral");
+  },
+  jogadores(){ crud("lfg",["game","nick","role","rank","server","note"],r=>`<b>${esc(r.nick)}</b><span class="tag">${GAME[r.game]}</span><span class="tag">${esc(r.role)}</span>${r.rank?`<span class="tag">${esc(r.rank)}</span>`:""}${r.server?`<span class="tag">${esc(r.server)}</span>`:""}<p>${esc(r.note)}</p>`); },
+  posts(){ crud("posts",["game","category","title","body"],r=>`<b>${esc(r.title)}</b><span class="tag">${GAME[r.game]}</span><span class="tag">${esc(r.category)}</span><p>${esc(r.body)}</p>`); },
+  builds(){ crud("builds",["game","champion","role","items","runes","notes"],r=>`<b>${esc(r.champion)}</b><span class="tag">${GAME[r.game]}</span><span class="tag">${esc(r.role)}</span><p>Itens: ${esc(r.items)}</p>${r.runes?`<p>Runas: ${esc(r.runes)}</p>`:""}<p>${esc(r.notes)}</p>`); },
+  async painel() {
+    const uid = session.user.id;
+    const { data: p } = await sb.from("profiles").select("full_name").eq("id", uid).maybeSingle();
+    const nome = (p && p.full_name) || session.user.email;
+    $("#ola").textContent = "Olá, " + nome;
+
+    const carregar = async () => {
+      const { data, error } = await sb.from("notes").select("id,content,created_at").order("created_at", { ascending: false });
+      const box = $("#lista");
+      if (error) return (box.innerHTML = `<div class="msg err">${esc(traduz(error.message))}</div>`);
+      if (!data.length) return (box.innerHTML = `<p class="empty">Você ainda não tem anotações. Escreva a primeira ao lado.</p>`);
+      box.innerHTML = data.map(n => `
+        <div class="note"><div><p>${esc(n.content)}</p><small>${new Date(n.created_at).toLocaleString("pt-BR")}</small></div>
+        <button class="btn danger" data-id="${n.id}" aria-label="Excluir anotação">Excluir</button></div>`).join("");
+      box.querySelectorAll("button[data-id]").forEach(btn => btn.onclick = async () => {
+        const { error } = await sb.from("notes").delete().eq("id", btn.dataset.id);
+        if (error) alert(traduz(error.message)); else carregar();
+      });
+    };
+    $("#f-nota").onsubmit = async e => {
+      e.preventDefault();
+      const txt = $("#txt").value.trim(); if (!txt) return;
+      const b = $("#f-nota button"); busy(b, true, "Salvar anotação");
+      const { error } = await sb.from("notes").insert({ content: txt });
+      busy(b, false, "Salvar anotação");
+      if (error) return show($("#msg"), traduz(error.message));
+      $("#txt").value = ""; show($("#msg"), "Anotação salva.", true); carregar();
+    };
+    carregar();
+  },
+  async perfil() {
+    const uid = session.user.id;
+    $("#email").value = session.user.email;
+    const { data: p } = await sb.from("profiles").select("full_name,bio").eq("id", uid).maybeSingle();
+    $("#nome").value = (p && p.full_name) || ""; $("#bio").value = (p && p.bio) || "";
+    $("#f-perfil").onsubmit = async e => {
+      e.preventDefault();
+      const b = $("#f-perfil button"); busy(b, true, "Salvar alterações");
+      const { error } = await sb.from("profiles").update({ full_name: $("#nome").value.trim(), bio: $("#bio").value.trim() }).eq("id", uid);
+      busy(b, false, "Salvar alterações");
+      show($("#f-perfil #msg"), error ? traduz(error.message) : "Alterações salvas.", !error);
+    };
+    $("#f-senha").onsubmit = async e => {
+      e.preventDefault();
+      const msg = $("#f-senha #msg");
+      if ($("#f-senha #senha").value.length < 8) return show(msg, "A senha precisa ter pelo menos 8 caracteres.");
+      const { error } = await sb.auth.updateUser({ password: $("#f-senha #senha").value });
+      show(msg, error ? traduz(error.message) : "Senha alterada.", !error);
+      if (!error) $("#f-senha #senha").value = "";
+    };
+  }
+};
+
+/* ---------- Roteador ---------- */
+const PROTEGIDAS = ["painel", "perfil"], SO_VISITANTE = ["entrar", "cadastro"];
+
+function renderNav() {
+  const PUB='<a class="btn" href="#chat">Chat</a><a class="btn" href="#jogadores">Jogadores</a><a class="btn" href="#posts">Posts</a><a class="btn" href="#builds">Builds</a>';
+  $("#nav").innerHTML = PUB + (session
+    ? `<a class="btn" href="#painel">Painel</a><a class="btn" href="#perfil">Perfil</a><button class="btn" id="sair">Sair</button>`
+    : `<a class="btn" href="#entrar">Entrar</a><a class="btn primary" href="#cadastro">Criar conta</a>`);
+  const s = $("#sair");
+  if (s) s.onclick = async () => { await sb.auth.signOut(); location.hash = "#inicio"; };
+}
+
+async function route() {
+  let r = location.hash.slice(1) || "inicio";
+  if (!views[r]) r = "inicio";
+  if (PROTEGIDAS.includes(r) && !session) { location.hash = "#entrar"; return; }
+  if (SO_VISITANTE.includes(r) && session) { location.hash = "#painel"; return; }
+  if (r === "redefinir" && !session) { location.hash = "#recuperar"; return; }
+  if (window.__c) { window.__c(); window.__c = null; }
+  renderNav();
+  $("#app").innerHTML = views[r]();
+  document.title = "Rift Hub";
+  if (binds[r]) binds[r]();
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener("hashchange", route);
+sb.auth.onAuthStateChange((event, s) => {
+  session = s;
+  if (event === "PASSWORD_RECOVERY") { location.hash = "#redefinir"; }
+  setTimeout(route, 0);
+});
+(async () => {
+  const { data } = await sb.auth.getSession();
+  session = data.session;
+  route();
+})();
+</script>
+</body>
+</html>
